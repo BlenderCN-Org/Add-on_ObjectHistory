@@ -114,7 +114,7 @@ class OBJECT_OT_ObjectHistoryDelete(bpy.types.Operator):
         #also remove history from other history
         for his in history:
             his.ob.history.remove(index)
-         
+            
         return {"FINISHED"}
 
 
@@ -222,7 +222,7 @@ class OBJECT_OT_ObjectHistoryRevertPrevious(bpy.types.Operator):
 class OBJECT_OT_ObjectHistoryCleanUp(bpy.types.Operator):
     bl_idname = "objecthistory.clean"
     bl_label = "Clean Up"
-    bl_description = "clean unused repository from file"
+    bl_description = "Clean unused histories up from file"
     
     @classmethod
     def poll(cls,context):
@@ -234,14 +234,21 @@ class OBJECT_OT_ObjectHistoryCleanUp(bpy.types.Operator):
         original_objects = list(set([ob.history_original for ob in bpy.data.objects if ob.history_original is not None]))
         removed_original_objects = [ob for ob in original_objects if not ob.users_scene]
         
+        #Tracking history objects through histories of removed_original_objects.
         for ob in removed_original_objects:            
             for history in ob.history:
                 history.ob.history_original = None
                 history.ob.use_fake_user = False
                 history.ob.history.clear()
                 count += 1
-                
+                        
+            #In some case(idk exactly when this happens),history_original of original object is itself.                      
+            if ob.history_original == ob:
+                ob.history_original = None
+            
+            
             ob.history.clear()
+        
         
         
         self.report({"INFO"},"{} unused repositries will be discarded when closing Blender".format(count))
@@ -279,20 +286,21 @@ class OBJECT_PT_ObjectHistoryPanel(bpy.types.Panel):
         row.template_list("ObjectHistoryList","historylist",object,"history",object,"history_index",rows=3)        
         
         col = row.column(align=True)
-        
+
         col.operator("objecthistory.save",text="",icon="ZOOMIN")
         col.operator("objecthistory.delete",text="",icon="ZOOMOUT")
         #col.operator("objecthistory.pull",text="Pull")
         #col.operator("objecthistory.preview",text="Preview")
         col.operator("objecthistory.revert",text="",icon="LOOP_BACK")
         col = col.column(align =False)
-        col.operator("objecthistory.clean",text="",icon="RADIO")
         
         row = layout.row(align = True)
         row.label(text="Inheritance :")
         row.prop(scene,"history_inheritance_loc",text = "Location")
         row.prop(scene,"history_inheritance_rot",text = "Rotation")
         row.prop(scene,"history_inheritance_scale",text = "Scale")
+        
+        layout.operator("objecthistory.clean",text="Clean Up",icon="RADIO")
         
         #col = layout.column()
         #col.prop(scene,"history_safety",text = "Safe")
@@ -345,8 +353,7 @@ def register():
         bpy.utils.register_class(cls)
     
     bpy.types.VIEW3D_MT_object_specials.prepend(ObjectHistory_menu_draw)
-    
-  
+      
     bpy.types.Object.history_index = bpy.props.IntProperty(default=0)
     bpy.types.Object.history = bpy.props.CollectionProperty(type = ObjectHistory)
     bpy.types.Object.is_history = bpy.props.BoolProperty(default=False)
